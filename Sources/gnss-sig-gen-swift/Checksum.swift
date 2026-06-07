@@ -1,26 +1,18 @@
 /******************************************************************************
- * Copyright (c) 2019-2026 Shu Wang <shuwang1@outlook.com>. All rights reserved.
  *
- * The Software is licensed, not sold. You may use, download, and modify this 
- * Software strictly for Personal, Non-Commercial, or Educational purposes. 
- * Any commercial use, including but not limited to selling the Software, 
- * using it to provide a commercial service, or incorporating it into a 
- * for-profit product, is strictly prohibited without an explicit commercial 
- * license from the Licensor.
+ * Aut viam inveniam aut faciam
  *
- * All title, copyright, and other intellectual property rights in and to the 
- * Software are and shall remain the sole and exclusive property of the Licensor. 
- * All rights not expressly granted herein are reserved.
+ * Copyright (c) 2019-2026 Shu Wang. All rights reserved.
  *
- * THE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND, EXPRESS OR 
- * IMPLIED. THE LICENSOR SHALL IN NO EVENT BE LIABLE FOR ANY CLAIMS, DAMAGES, 
- * OR OTHER LIABILITY ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE 
- * OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * PROPRIETARY AND CONFIDENTIAL
  *
- * In no event shall the author or copyright holders be liable for any claim, 
- * damages, or other liability, whether in an action of contract, tort or 
- * otherwise, arising from, out of, or in connection with the software or the 
- * use or other dealings in the software.
+ * This software and its documentation (the "Software") are the confidential 
+ * and proprietary information of Shu Wang. All rights, title, and 
+ * interest in and to the Software, including all intellectual property rights, 
+ * are and shall remain the exclusive property of Shu Wang.
+ *
+ * Correspondence regarding this Software should be directed to:
+ * Shu Wang <shuwang1@outlook.com>
  ******************************************************************************/
 
 import Foundation
@@ -44,6 +36,14 @@ struct Checksum {
     private static let bmask: [UInt32] = [
         0x3B1F3480, 0x1D8F9A40, 0x2EC7CD00,
         0x1763E680, 0x2BB1F340, 0x0B7A89C0
+    ]
+    
+    /// Pre-calculated parity XOR masks for calcChecksumV1.
+    private static let parities: [UInt8] = [
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x13, 0x25,
+        0x0B, 0x16, 0x2C, 0x19, 0x32, 0x26, 0x0E, 0x1F,
+        0x3E, 0x3D, 0x38, 0x31, 0x23, 0x07, 0x0D, 0x1A,
+        0x37, 0x2F, 0x1C, 0x3B, 0x34, 0x2A, 0x16, 0x29
     ]
     
     /// Calculates the 6 parity bits for a 30-bit GPS navigation word.
@@ -70,6 +70,36 @@ struct Checksum {
         wordj |= ((b30 + countBits(bmask[3] & d)) % 2) << 2
         wordj |= ((b30 + countBits(bmask[4] & d)) % 2) << 1
         wordj |= ((b29 + countBits(bmask[5] & d)) % 2)
+        
+        if b30 != 0 { wordj ^= 0x0000003F }
+        
+        return wordj & 0x3FFFFFFF
+    }
+    
+    /// Alternative implementation of the IS-GPS-200 parity calculation.
+    /// - Parameters:
+    ///   - sbfmWord: The 24-bit navigation data word (with top 2 bits from previous word).
+    ///   - nib: Special handling flag for TOW/HOW words.
+    /// - Returns: A 30-bit word including 6 parity bits.
+    static func calcChecksumV1(_ sbfmWord: UInt32, nib: Int) -> UInt32 {
+        var d = sbfmWord & 0x3FFFFFC0
+        let b29 = (sbfmWord >> 31) & 0x1
+        let b30 = (sbfmWord >> 30) & 0x1
+        
+        if nib != 0 {
+            if (b30 + countBits(bmask[4] & d)) % 2 != 0 { d ^= (0x1 << 6) }
+            if (b29 + countBits(bmask[5] & d)) % 2 != 0 { d ^= (0x1 << 7) }
+        }
+        
+        var wordj = d | (b30 << 30) | (b29 << 31)
+        
+        for i in 6..<32 {
+            if (wordj & (1 << i)) != 0 {
+                wordj ^= UInt32(parities[i])
+            }
+        }
+        
+        if b30 != 0 { wordj ^= 0x3FFFFFFF }
         
         return wordj & 0x3FFFFFFF
     }

@@ -57,4 +57,4 @@ swift package generate-documentation
 
 ## License
 
-Refer to [LICENSE.md](LICENSE.md) for licensing details. 2016 All Rights Reserved by Shu Wang.
+**Proprietary and Confidential.** Refer to [LICENSE.md](LICENSE.md) for full licensing details. All rights reserved by Shu Wang.
