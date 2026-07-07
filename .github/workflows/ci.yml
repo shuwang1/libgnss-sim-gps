@@ -28,4 +28,4 @@ jobs:
     - name: Upload
       uses: codecov/codecov-action@v5
       with:
-        token: ${{ secrets.CODECOV_SHUWANG1_LIBGNSS_GPS_SIM_TOKEN }}
+        token: ${{ secrets.CODECOV_LIBGNSS_SHUWANG1_GPS_SIM_TOKEN }}
