@@ -59,6 +59,8 @@ struct Channel {
         
         let lam_i = lam_u + psi * sin(azel.az) / cos(phi_i * Constants.PI)
         let phi_m = phi_i + 0.064 * cos((lam_i - 1.617) * Constants.PI)
+        let phi_m2 = phi_m * phi_m
+        let phi_m3 = phi_m2 * phi_m
         
         // Horner's method for polynomial evaluation
         var AMP = ionoutc.alpha0 + phi_m * (ionoutc.alpha1 + phi_m * (ionoutc.alpha2 + phi_m * ionoutc.alpha3))
