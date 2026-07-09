@@ -157,9 +157,16 @@ class Simulator {
     /// Dynamically allocates channels to visible satellites.
     func allocateChannels() {
         let currentXYZ = config.staticMode ? (xyz.first ?? Vector3(0,0,0)) : xyz[0]
+
+        // PERFORMANCE OPTIMIZATION: Precompute LLH and TMat for the receiver
+        // to avoid redundant iterative trigonometry calculations inside the satellite loop.
+        // Impact: Reduces CPU overhead per time step significantly.
+        let currentLLH = MathUtils.xyz2llh(currentXYZ)
+        let currentTMat = MathUtils.ltcmat(currentLLH)
+
         for sv in 0..<Constants.MAX_SAT {
             var azel: (az: Double, el: Double) = (0, 0)
-            let visible = checkSatVisibility(sv: sv, g: receiverTime, xyz: currentXYZ, elvMask: config.elvMask, azel: &azel)
+            let visible = checkSatVisibility(sv: sv, g: receiverTime, xyz: currentXYZ, elvMask: config.elvMask, azel: &azel, llh: currentLLH, tmat: currentTMat)
             
             if visible == 1 {
                 if allocatedSat[sv] == -1 {
@@ -179,7 +186,7 @@ class Simulator {
                             link.generateNavMsg(g: receiverTime, initFlag: true)
                             
                             let satData = Positioning.calculateSatPos(eph: eph[ieph][sv], g: receiverTime)
-                            let rho = Channel.estimateRange(ionoutc: ionUTC, g: receiverTime, xyz: currentXYZ, satPos: satData.pos, satVel: satData.vel, clk: satData.clk)
+                            let rho = Channel.estimateRange(ionoutc: ionUTC, g: receiverTime, xyz: currentXYZ, satPos: satData.pos, satVel: satData.vel, clk: satData.clk, llh: currentLLH, tmat: currentTMat)
                             
                             link.rho0 = rho
                             link.carrPhase = 0
@@ -204,15 +211,15 @@ class Simulator {
     ///   - xyz: Receiver position.
     ///   - elvMask: Mask angle in degrees.
     ///   - azel: Output Azimuth/Elevation.
+    ///   - llh: Precomputed receiver LLH position.
+    ///   - tmat: Precomputed receiver local tangent plane matrix.
     /// - Returns: 1 if visible, 0 if below mask, -1 if ephemeris invalid.
-    func checkSatVisibility(sv: Int, g: GPSTime, xyz: Vector3, elvMask: Double, azel: inout (az: Double, el: Double)) -> Int {
+    func checkSatVisibility(sv: Int, g: GPSTime, xyz: Vector3, elvMask: Double, azel: inout (az: Double, el: Double), llh: Vector3, tmat: [[Double]]) -> Int {
         let e = eph[ieph][sv]
         if !e.vflg { return -1 }
         
         let satData = Positioning.calculateSatPos(eph: e, g: g)
         let los = satData.pos - xyz
-        let llh = MathUtils.xyz2llh(xyz)
-        let tmat = MathUtils.ltcmat(llh)
         let neu = MathUtils.ecef2neu(los, t: tmat)
         azel = MathUtils.neu2azel(neu)
         
@@ -234,13 +241,20 @@ class Simulator {
         } else {
             currentXYZ = xyz[stepIdx]
         }
+
+        // PERFORMANCE OPTIMIZATION: Precompute LLH and TMat for the receiver
+        // to avoid redundant iterative trigonometry calculations inside the channel loop.
+        // Impact: Reduces CPU overhead per time step significantly.
+        let currentLLH = MathUtils.xyz2llh(currentXYZ)
+        let currentTMat = MathUtils.ltcmat(currentLLH)
+
         var gains = [Int](repeating: 0, count: Constants.MAX_CHAN)
         
         for i in 0..<Constants.MAX_CHAN {
             if channels[i].prn > 0 {
                 let svIdx = channels[i].prn - 1
                 let satData = Positioning.calculateSatPos(eph: eph[ieph][svIdx], g: receiverTime)
-                let rho = Channel.estimateRange(ionoutc: ionUTC, g: receiverTime, xyz: currentXYZ, satPos: satData.pos, satVel: satData.vel, clk: satData.clk)
+                let rho = Channel.estimateRange(ionoutc: ionUTC, g: receiverTime, xyz: currentXYZ, satPos: satData.pos, satVel: satData.vel, clk: satData.clk, llh: currentLLH, tmat: currentTMat)
                 
                 GPSSignal.updateCodePhase(chan: &channels[i], rho1: rho, dt: Constants.TIME_STEP, delt: samplePeriod)
                 
