@@ -161,8 +161,9 @@ class Simulator {
         allocateChannels()
 
         let iqBuffSize = Int(config.sampFreq * Constants.TIME_STEP)
-        iAccBuff = [Int](repeating: 0, count: iqBuffSize)
-        qAccBuff = [Int](repeating: 0, count: iqBuffSize)
+        self.iqBuff = [Int16](repeating: 0, count: 2 * iqBuffSize)
+        self.iAcc = [Int](repeating: 0, count: iqBuffSize)
+        self.qAcc = [Int](repeating: 0, count: iqBuffSize)
 
         let visibleCount = allocatedSat.filter { $0 != -1 }.count
         Logger.info("Initialization complete. \(visibleCount) satellites visible.")
