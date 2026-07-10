@@ -122,13 +122,16 @@ struct GPSSignal {
                             }
                             p *= g
 
+                            // PERFORMANCE OPTIMIZATION:
+                            // 1. Replaced `+`, `+=`, `*` with unchecked operators `&+`, `&+=`, `&*` to avoid Swift runtime overflow checks in tight loop.
+                            // 2. Simplified `((carrPhase >> 16) & 0x1ff) << 1` into `(carrPhase >> 15) & 0x3fe` to save operations.
                             for _ in 0..<nToDo {
-                                let idx = Int((carrPhase >> 15) & 0x3fe)
-                                iAccPtr[isamp] += p * iqLutPtr[idx]
-                                qAccPtr[isamp] += p * iqLutPtr[idx + 1]
-                                carrPhase = carrPhase &+ carrStep
-                                codePhase += codeStep
-                                isamp += 1
+                                let iTable2 = Int(truncatingIfNeeded: (carrPhase >> 15) & 0x3fe)
+                                iAccPtr[isamp] &+= p &* Int(lutPtr[iTable2])
+                                qAccPtr[isamp] &+= p &* Int(lutPtr[iTable2 &+ 1])
+                                carrPhase &+= carrStep
+                                codePhase &+= codeStep
+                                isamp &+= 1
                             }
                         }
                         c.codePhaseFixed = codePhase
@@ -141,10 +144,15 @@ struct GPSSignal {
             }
         }
         
-        iqBuff.withUnsafeMutableBufferPointer { iqBuffPtr in
-            for isamp in 0..<iqBuffSize {
-                iqBuffPtr[isamp << 1] = Int16(truncatingIfNeeded: (iAcc[isamp] + 64) >> 7)
-                iqBuffPtr[(isamp << 1) + 1] = Int16(truncatingIfNeeded: (qAcc[isamp] + 64) >> 7)
+        iqBuff.withUnsafeMutableBufferPointer { iqPtr in
+            iAcc.withUnsafeBufferPointer { iAccPtr in
+                qAcc.withUnsafeBufferPointer { qAccPtr in
+                    for isamp in 0..<iqBuffSize {
+                        let idx = isamp << 1
+                        iqPtr[idx] = Int16(truncatingIfNeeded: (iAccPtr[isamp] &+ 64) >> 7)
+                        iqPtr[idx &+ 1] = Int16(truncatingIfNeeded: (qAccPtr[isamp] &+ 64) >> 7)
+                    }
+                }
             }
         }
     }
